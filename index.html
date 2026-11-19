@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Numerologist Skills Web | 賽博術數工程化排盤引擎</title>
+  <!-- 確定性曆法與排盤 JS 引擎 (替代原 Python CLI) -->
+  <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.6.12/lunar.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/iztro@2.5.0/dist/iztro.min.js"></script>
+  <style>
+    /* ==========================================
+       全域設計變數與深色石板主題 (Dark Slate Theme)
+       ========================================== */
+    :root {
+      --bg: #0f172a;
+      --header-bg: #0b1120;
+      --panel: #1e293b;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --gold: #fbbf24;
+      --danger: #f87171;
+      --success: #34d399;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* 頂部標題列 */
+    header {
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+
+    header .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+      display: block;
+    }
+
+    .engine-pill {
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    /* 訊息通知橫幅 (替代原生 alert) */
+    .toast-banner {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 9999;
+      max-width: 380px;
+      padding: 0.85rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--border);
+      background: #1e293b;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .toast-banner.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+    }
+
+    .toast-banner.error {
+      border-left: 4px solid var(--danger);
+      color: #fecaca;
+    }
+
+    .toast-banner.success {
+      border-left: 4px solid var(--success);
+      color: #a7f3d0;
+    }
+
+    /* 主容器與分頁導覽 */
+    .container {
+      max-width: 1240px;
+      margin: 1.5rem auto;
+      padding: 0 1rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 0.65rem 1.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.92rem;
+      min-height: 42px;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+      box-shadow: 0 2px 10px rgba(56, 189, 248, 0.25);
+    }
+
+    /* 響應式雙欄版面 (360px 控制欄 + 1fr 視覺化盤面區) */
+    .grid-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .grid-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .card h2 {
+      margin-top: 0;
+      margin-bottom: 0.9rem;
+      font-size: 1.05rem;
+      color: var(--gold);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.55rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .form-group {
+      margin-bottom: 0.95rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+      font-weight: 500;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.6rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 76px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 0.7rem 1.15rem;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      min-height: 44px;
+      font-size: 0.94rem;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn:hover {
+      background: var(--accent-hover);
+      color: #ffffff;
+    }
+
+    .btn:active {
+      transform: scale(0.99);
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: var(--text);
+      width: auto;
+      font-size: 0.86rem;
+      padding: 0.6rem 0.95rem;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+      color: #ffffff;
+    }
+
+    .btn-mini {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn-mini:hover {
+      background: rgba(56, 189, 248, 0.28);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .rule-badge {
+      background: rgba(56, 189, 248, 0.12);
+      border-left: 3px solid var(--accent);
+      padding: 0.65rem 0.85rem;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      margin-bottom: 1rem;
+      border-radius: 0 6px 6px 0;
+    }
+
+    /* ==========================================
+       紫微斗數 4x4 傳統命盤宮位網格
+       ========================================== */
+    .board-scroll-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .zw-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(125px, 1fr));
+      gap: 6px;
+      margin-top: 0.5rem;
+    }
+
+    .zw-cell {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.55rem;
+      min-height: 122px;
+      font-size: 0.78rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+
+    .zw-cell:hover {
+      border-color: var(--accent);
+    }
+
+    .zw-center {
+      grid-column: 2 / 4;
+      grid-row: 2 / 4;
+      background: #131c31;
+      border: 1px dashed var(--accent);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.35rem;
+      font-size: 0.88rem;
+    }
+
+    .zw-palace-title {
+      font-weight: 700;
+      color: var(--gold);
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+      padding-bottom: 2px;
+    }
+
+    .zw-major {
+      color: var(--danger);
+      font-weight: 600;
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+
+    .zw-mutagen {
+      background: rgba(248, 113, 113, 0.2);
+      color: #fca5a5;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-weight: 700;
+      margin-left: 2px;
+    }
+
+    .zw-minor {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    /* ==========================================
+       奇門遁甲 3x3 洛書九宮盤
+       ========================================== */
+    .qm-summary-bar {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.9rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.86rem;
+      color: var(--gold);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      justify-content: space-between;
+    }
+
+    .qm-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(110px, 1fr));
+      gap: 8px;
+    }
+
+    .qm-cell {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      min-height: 118px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      transition: border-color 0.2s;
+    }
+
+    .qm-cell:hover {
+      border-color: var(--accent);
+    }
+
+    .qm-top {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .qm-god {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .qm-mid {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.98rem;
+      margin: 0.45rem 0;
+    }
+
+    .qm-bot {
+      display: flex;
+      justify-content: space-between;
+      color: var(--accent);
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    /* ==========================================
+       四柱八字表格與大運序列
+       ========================================== */
+    .bz-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+
+    .bz-table th, .bz-table td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.45rem;
+      font-size: 0.88rem;
+    }
+
+    .bz-table th {
+      background: #0f172a;
+      color: var(--gold);
+    }
+
+    .pillar-char {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+
+    .dayun-pill {
+      display: inline-block;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin: 5px 5px 0 0;
+      font-size: 0.83rem;
+    }
+
+    /* ==========================================
+       JSON 檢視器與 AI 解盤輸出區
+       ========================================== */
+    pre {
+      background: var(--header-bg);
+      border: 1px solid var(--border);
+      padding: 0.85rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.78rem;
+      color: #a5f3fc;
+      max-height: 260px;
+      margin-top: 0.5rem;
+    }
+
+    .ai-output {
+      background: var(--header-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      min-height: 150px;
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      margin-top: 0.85rem;
+      line-height: 1.65;
+    }
+
+    .status-msg {
+      font-size: 0.84rem;
+      margin-top: 0.5rem;
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 浮動訊息通知橫幅 -->
+  <div id="toast-banner" class="toast-banner hidden" role="status" aria-live="polite"></div>
+
+  <!-- 頁首 -->
+  <header>
+    <div>
+      <h1>Numerologist Skills Web | 賽博術數工程化排盤引擎</h1>
+      <span class="subtitle">確定性 JS 排盤引擎 × SKILL.md 規則約束框架（純靜態零建置，適用 GitHub Pages）</span>
+    </div>
+    <span id="engine-status" class="engine-pill">正在載入曆法引擎...</span>
+  </header>
+
+  <div class="container">
+    <!-- 三大術數模組切換分頁 -->
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('ziwei')">紫微斗數 (ziwei-doushu)</button>
+      <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('qimen')">奇門遁甲 (qimen-dunjia)</button>
+      <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('bazi')">四柱八字 (bazi)</button>
+    </div>
+
+    <div class="grid-layout">
+      <!-- ==========================================
+           左側欄：參數輸入、口徑鎖定與 Gemini API 設定
+           ========================================== -->
+      <div>
+        <!-- 1A. 紫微斗數表單 -->
+        <div id="form-ziwei" class="card">
+          <h2>1. 紫微斗數參數與口徑鎖定</h2>
+          <div class="rule-badge">
+            <strong>SKILL.md 工程約束：</strong>先校驗出生時間與性別，鎖定閏月與子時口徑後，交由確定性引擎排盤，禁止大模型自行推算宮位星曜。
+          </div>
+          <div class="form-group">
+            <label for="zw-date">陽曆出生日期 (YYYY-MM-DD)</label>
+            <input type="date" id="zw-date" value="1982-08-09" />
+          </div>
+          <div class="form-group">
+            <label for="zw-time">出生時辰</label>
+            <select id="zw-time">
+              <option value="0">00:00 - 00:59 (早子時)</option>
+              <option value="1">01:00 - 02:59 (丑時)</option>
+              <option value="2">03:00 - 04:59 (寅時)</option>
+              <option value="3">05:00 - 06:59 (卯時)</option>
+              <option value="4" selected>07:00 - 08:59 (辰時)</option>
+              <option value="5">09:00 - 10:59 (巳時)</option>
+              <option value="6">11:00 - 12:59 (午時)</option>
+              <option value="7">13:00 - 14:59 (未時)</option>
+              <option value="8">15:00 - 16:59 (申時)</option>
+              <option value="9">17:00 - 18:59 (酉時)</option>
+              <option value="10">19:00 - 20:59 (戌時)</option>
+              <option value="11">21:00 - 22:59 (亥時)</option>
+              <option value="12">23:00 - 23:59 (晚子時)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="zw-gender">性別（定大限順逆）</label>
+            <select id="zw-gender">
+              <option value="男">男</option>
+              <option value="女">女</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="zw-leap">閏月歸屬口徑</label>
+            <select id="zw-leap">
+              <option value="true">月中分界（15日後算下月）</option>
+              <option value="false">全月歸本月</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="zw-question">解讀焦點 / 問題（選填，留空則解讀本命盤結構）</label>
+            <textarea id="zw-question" placeholder="例如：請分析本命財帛與官祿三方四正結構，以及近兩年流年重心。"></textarea>
+          </div>
+          <button type="button" class="btn" onclick="runZiwei()">執行確定性排盤 (JS)</button>
+        </div>
+
+        <!-- 1B. 奇門遁甲表單 -->
+        <div id="form-qimen" class="card hidden">
+          <h2>1. 奇門遁甲起局與單事約束</h2>
+          <div class="rule-badge">
+            <strong>SKILL.md 工程約束：</strong>遵循「無問不占、單事單占」。必須填寫具體所問事項，並明確聲明「時家轉盤・拆補法」口徑。
+          </div>
+          <div class="form-group">
+            <label for="qm-datetime">起局陽曆時間</label>
+            <input type="datetime-local" id="qm-datetime" />
+          </div>
+          <div class="form-group">
+            <label for="qm-school">定局流派口徑</label>
+            <select id="qm-school">
+              <option value="時家轉盤奇門（拆補法・寄坤二宮）">時家轉盤奇門（拆補法・寄坤二宮）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label for="qm-question" style="margin:0;">所問單一事項（必填）</label>
+              <button type="button" class="btn-mini" onclick="fillSampleQimen()">填入範例事項</button>
+            </div>
+            <textarea id="qm-question" placeholder="例如：本週五前往拜訪新客戶洽談系統專案合作，結果與注意事項為何？"></textarea>
+          </div>
+          <button type="button" class="btn" onclick="runQimen()">執行奇門排盤 (JS)</button>
+        </div>
+
+        <!-- 1C. 四柱八字表單 -->
+        <div id="form-bazi" class="card hidden">
+          <h2>1. 四柱八字參數與換日口徑</h2>
+          <div class="rule-badge">
+            <strong>SKILL.md 工程約束：</strong>精準依節氣交接換月柱，並鎖定晚子時（23:00-23:59）日柱換日口徑，輸出結構化四柱與十神大運。
+          </div>
+          <div class="form-group">
+            <label for="bz-datetime">陽曆出生時間</label>
+            <input type="datetime-local" id="bz-datetime" value="1982-08-09T08:00" />
+          </div>
+          <div class="form-group">
+            <label for="bz-gender">性別（定大運順逆）</label>
+            <select id="bz-gender">
+              <option value="1">男</option>
+              <option value="0">女</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="bz-sect">晚子時（23:00-23:59）日柱口徑</label>
+            <select id="bz-sect">
+              <option value="1">23:00 換日柱（算隔日）</option>
+              <option value="2">00:00 換日柱（晚子時仍算當日）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="bz-question">分析重點（選填）</label>
+            <textarea id="bz-question" placeholder="例如：請分析日主強弱、月令格局與當前大運流年之五行生剋影響。"></textarea>
+          </div>
+          <button type="button" class="btn" onclick="runBazi()">執行八字排盤 (JS)</button>
+        </div>
+
+        <!-- 3. 前端直連 Gemini API 設定 (Free Tier BYOK) -->
+        <div class="card">
+          <h2>3. 前端直連 Gemini API 設定 (Free Tier BYOK)</h2>
+          <div class="form-group">
+            <label for="api-url">Gemini 官方原生 API Endpoint（已固定鎖定）</label>
+            <input
+              type="text"
+              id="api-url"
+              value="https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+              readonly
+              style="color: var(--muted); background: #0b1120; cursor: not-allowed; font-size: 0.8rem;"
+            />
+          </div>
+          <div class="form-group">
+            <label for="api-model">Gemini 模型選擇（由低至高階排列，Free Tier 建議優先選用 Flash-Lite）</label>
+            <select id="api-model" onchange="saveApiConfig()">
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (gemini-3.1-flash-lite)</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (gemini-3.5-flash-lite)</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash (gemini-3.6-flash)</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash (gemini-3.8-flash)</option>
+              <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (gemini-4-hydrogen)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <label for="api-key" style="margin: 0;">Gemini API Key（僅儲存在本機 localStorage）</label>
+              <button type="button" class="btn-mini" onclick="clearApiKey()">清除已存 Key</button>
+            </div>
+            <input type="password" id="api-key" placeholder="AIzaSy..." onchange="saveApiConfig()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- ==========================================
+           右側欄：確定性視覺排盤 + JSON + SKILL.md 解讀
+           ========================================== -->
+      <div>
+        <div class="card">
+          <h2>
+            <span>2. 確定性排盤結果（替代 Python CLI 輸出）</span>
+            <span id="active-board-badge" style="font-size:0.78rem; color:var(--accent); font-weight:600;">當前：紫微斗數</span>
+          </h2>
+          <div id="visual-board" class="board-scroll-wrap">正在初始化盤面...</div>
+          <details style="margin-top: 1rem;">
+            <summary style="cursor: pointer; color: var(--accent); font-size: 0.86rem; font-weight: 600;">
+              檢視傳遞給 AI 的結構化盤面 JSON
+            </summary>
+            <pre id="json-output">{}</pre>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2>4. SKILL.md 規則約束與 AI 結構化解盤</h2>
+          <div class="btn-row">
+            <button type="button" class="btn btn-secondary" onclick="copyFullPrompt()">一鍵複製「SKILL 約束 + 盤面 JSON」提示詞</button>
+            <button type="button" class="btn" style="width: auto;" onclick="callLLM()">呼叫 Gemini 執行受約束解盤</button>
+          </div>
+          <div id="copy-status" class="status-msg"></div>
+          <div id="ai-output" class="ai-output">排盤完成後，您可直接點擊「一鍵複製」貼至網頁版 Gemini，或填入 Free Tier Gemini API Key 在此直接生成符合 SKILL.md 規範的解盤報告。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 全域狀態管理與通用工具函式
+    // ==========================================
+    let currentTab = 'ziwei';
+    let latestPayload = null;
+    let toastTimer = null;
+
+    /**
+     * 顯示非阻塞式通知橫幅 (不使用原生 alert)
+     * @param {string} message - 提示訊息內容
+     * @param {'info'|'success'|'error'} type - 提示類型
+     */
+    function showToast(message, type = 'info') {
+      const banner = document.getElementById('toast-banner');
+      banner.textContent = message;
+      banner.className = `toast-banner ${type}`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 3600);
+    }
+
+    /**
+     * 安全複製文字至剪貼簿 (相容 iFrame 沙盒與 GitHub Pages 環境)
+     * @param {string} text - 要複製的完整文字
+     * @returns {boolean} 是否成功複製
+     */
+    function copyTextSafe(text) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.top = '-9999px';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch (err) {
+        copied = false;
+      }
+      document.body.removeChild(textArea);
+
+      if (!copied && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        copied = true;
+      }
+      return copied;
+    }
+
+    // ==========================================
+    // 頁面初始化與本機 Gemini 設定存取
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      try {
+        const savedKey = localStorage.getItem('numerology_gemini_api_key');
+        const savedModel = localStorage.getItem('numerology_gemini_model');
+        if (savedKey) {
+          document.getElementById('api-key').value = savedKey;
+        }
+        if (savedModel) {
+          const modelSelect = document.getElementById('api-model');
+          const hasOption = Array.from(modelSelect.options).some(opt => opt.value === savedModel);
+          if (hasOption) {
+            modelSelect.value = savedModel;
+          }
+        }
+      } catch (e) {
+        // 忽略無痕或沙盒環境下的 localStorage 限制
+      }
+
+      // 初始化奇門起局時間為當前本地時間
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('qm-datetime').value = now.toISOString().slice(0, 16);
+
+      // 確認 CDN 確定性曆法與排盤庫載入狀態
+      const statusEl = document.getElementById('engine-status');
+      if (typeof Solar !== 'undefined' && typeof iztro !== 'undefined') {
+        statusEl.textContent = '曆法與排盤引擎就緒 (純靜態離線可算)';
+        statusEl.style.color = 'var(--success)';
+        runZiwei();
+      } else {
+        statusEl.textContent = 'CDN 引擎載入異常，請檢查網路連線';
+        statusEl.style.color = 'var(--danger)';
+      }
+    });
+
+    /**
+     * 儲存 Gemini API Key 與選擇的模型至 localStorage
+     */
+    function saveApiConfig() {
+      try {
+        localStorage.setItem('numerology_gemini_api_key', document.getElementById('api-key').value.trim());
+        localStorage.setItem('numerology_gemini_model', document.getElementById('api-model').value);
+        showToast('Gemini API Key 與模型設定已儲存於本機瀏覽器', 'success');
+      } catch (e) {
+        showToast('目前瀏覽器環境限制 localStorage 寫入', 'error');
+      }
+    }
+
+    /**
+     * 清除本機儲存的 Gemini API Key
+     */
+    function clearApiKey() {
+      try {
+        localStorage.removeItem('numerology_gemini_api_key');
+      } catch (e) {
+        // 忽略沙盒限制
+      }
+      document.getElementById('api-key').value = '';
+      showToast('已清除本機儲存的 Gemini API Key', 'info');
+    }
+
+    /**
+     * 切換三大術數模組分頁
+     * @param {'ziwei'|'qimen'|'bazi'} tab - 目標分頁代碼
+     */
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabOrder = ['ziwei', 'qimen', 'bazi'];
+      const tabLabels = {
+        ziwei: '當前：紫微斗數',
+        qimen: '當前：奇門遁甲',
+        bazi: '當前：四柱八字'
+      };
+
+      document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+        const isActive = tabOrder[idx] === tab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+
+      tabOrder.forEach(t => {
+        document.getElementById(`form-${t}`).classList.toggle('hidden', t !== tab);
+      });
+
+      document.getElementById('active-board-badge').textContent = tabLabels[tab];
+      document.getElementById('copy-status').textContent = '';
+
+      if (tab === 'ziwei') {
+        runZiwei();
+      } else if (tab === 'bazi') {
+        runBazi();
+      } else if (tab === 'qimen') {
+        const qmInput = document.getElementById('qm-question');
+        if (!qmInput.value.trim()) {
+          qmInput.value = '本週五前往拜訪新客戶洽談系統專案合作，結果與注意事項為何？';
+        }
+        runQimen();
+      }
+    }
+
+    /**
+     * 為奇門遁甲填入範例占問事項
+     */
+    function fillSampleQimen() {
+      document.getElementById('qm-question').value = '本週五前往拜訪新客戶洽談系統專案合作，結果與注意事項為何？';
+      showToast('已填入範例占問事項', 'info');
+    }
+
+    // ==========================================
+    // 模組 1：紫微斗數確定性排盤 (替代 ziwei_cli.py)
+    // ==========================================
+    function runZiwei() {
+      const dateStr = document.getElementById('zw-date').value;
+      const timeIdx = parseInt(document.getElementById('zw-time').value, 10);
+      const gender = document.getElementById('zw-gender').value;
+      const fixLeap = document.getElementById('zw-leap').value === 'true';
+      const question = document.getElementById('zw-question').value.trim() || '請進行本命盤核心結構、三方四正與格局總體解讀。';
+
+      if (!dateStr) {
+        showToast('請選擇陽曆出生日期', 'error');
+        return;
+      }
+
+      try {
+        const astro = iztro.astro.bySolar(dateStr, timeIdx, gender, fixLeap, 'zh-TW');
+        const structured = {
+          system: 'ziwei-doushu',
+          methodology: {
+            calendar: '陽曆轉農曆確定性排盤',
+            leapMonthRule: fixLeap ? '月中分界（15日後歸下月）' : '全月歸本月',
+            school: '三合紫微（含四化與大限）'
+          },
+          basicInfo: {
+            solarDate: astro.solarDate,
+            lunarDate: astro.lunarDate,
+            chineseDate: astro.chineseDate,
+            time: astro.time,
+            gender,
+            fiveElementsClass: astro.fiveElementsClass,
+            soulMaster: astro.soul,
+            bodyMaster: astro.body,
+            soulPalaceBranch: astro.earthlyBranchOfSoulPalace,
+            bodyPalaceBranch: astro.earthlyBranchOfBodyPalace
+          },
+          palaces: astro.palaces.map(p => ({
+            name: p.name,
+            isBodyPalace: p.isBodyPalace,
+            stemBranch: p.heavenlyStem + p.earthlyBranch,
+            decadalRange: p.decadal ? `${p.decadal.range[0]}-${p.decadal.range[1]}歲` : '',
+            majorStars: p.majorStars.map(s => `${s.name}${s.brightness ? '(' + s.brightness + ')' : ''}${s.mutagen ? '[化' + s.mutagen + ']' : ''}`),
+            minorStars: p.minorStars.map(s => `${s.name}${s.mutagen ? '[化' + s.mutagen + ']' : ''}`)
+          }))
+        };
+
+        latestPayload = { type: 'ziwei', data: structured, question };
+        document.getElementById('json-output').textContent = JSON.stringify(structured, null, 2);
+
+        // 繪製傳統 4x4 紫微命盤方格
+        const branchGridPos = {
+          '巳': '1 / 1', '午': '1 / 2', '未': '1 / 3', '申': '1 / 4',
+          '辰': '2 / 1',                           '酉': '2 / 4',
+          '卯': '3 / 1',                           '戌': '3 / 4',
+          '寅': '4 / 1', '丑': '4 / 2', '子': '4 / 3', '亥': '4 / 4'
+        };
+
+        let html = `<div class="zw-grid">`;
+        astro.palaces.forEach(p => {
+          const pos = branchGridPos[p.earthlyBranch] || 'auto';
+          const majors = p.majorStars.map(s => `${s.name}${s.mutagen ? `<span class="zw-mutagen">化${s.mutagen}</span>` : ''}`).join('、') || '（無主星）';
+          const minors = p.minorStars.map(s => s.name).join(' ');
+          html += `
+            <div class="zw-cell" style="grid-area: ${pos};">
+              <div class="zw-palace-title">
+                <span>${p.name}${p.isBodyPalace ? ' [身]' : ''}</span>
+                <span>${p.heavenlyStem}${p.earthlyBranch}</span>
+              </div>
+              <div class="zw-major">${majors}</div>
+              <div class="zw-minor">${minors}</div>
+              <div style="color:var(--muted); font-size:0.7rem; text-align:right;">大限 ${p.decadal.range[0]}-${p.decadal.range[1]}</div>
+            </div>`;
+        });
+
+        html += `
+          <div class="zw-center">
+            <div style="color:var(--gold); font-weight:700; margin-bottom:2px;">命盤中宮摘要</div>
+            <div>陽曆：${astro.solarDate} (${astro.time})</div>
+            <div>農曆：${astro.lunarDate}</div>
+            <div>干支：${astro.chineseDate}</div>
+            <div>局數：${astro.fiveElementsClass} ｜ 命主：${astro.soul} ｜ 身主：${astro.body}</div>
+          </div>
+        </div>`;
+        document.getElementById('visual-board').innerHTML = html;
+      } catch (err) {
+        showToast(`紫微排盤發生錯誤：${err.message}`, 'error');
+      }
+    }
+
+    // ==========================================
+    // 模組 2：奇門遁甲確定性排盤 (替代 qimen_cli.py)
+    // ==========================================
+    function runQimen() {
+      const dtVal = document.getElementById('qm-datetime').value;
+      const school = document.getElementById('qm-school').value;
+      const question = document.getElementById('qm-question').value.trim();
+
+      if (!dtVal) {
+        showToast('請選擇起局時間', 'error');
+        return;
+      }
+      if (!question) {
+        showToast('遵循 SKILL.md「無問不占」原則，請先輸入要占問的單一事項！', 'error');
+        return;
+      }
+
+      try {
+        const [dPart, tPart] = dtVal.split('T');
+        const [Y, M, D] = dPart.split('-').map(Number);
+        const [h, m] = tPart.split(':').map(Number);
+
+        const solar = Solar.fromYmdHms(Y, M, D, h, m, 0);
+        const lunar = solar.getLunar();
+        const bazi = lunar.getEightChar();
+
+        const yearGZ = bazi.getYear();
+        const monthGZ = bazi.getMonth();
+        const dayGZ = bazi.getDay();
+        const timeGZ = bazi.getTime();
+        const prevJieQi = lunar.getPrevJieQi(true).getName();
+
+        // 24節氣陰陽遁局數對照表
+        const jieQiMap = {
+          '冬至': ['陽遁', [1, 7, 4]], '小寒': ['陽遁', [2, 8, 5]], '大寒': ['陽遁', [3, 9, 6]],
+          '立春': ['陽遁', [8, 5, 2]], '雨水': ['陽遁', [9, 6, 3]], '惊蛰': ['陽遁', [1, 7, 4]], '驚蟄': ['陽遁', [1, 7, 4]],
+          '春分': ['陽遁', [3, 9, 6]], '清明': ['陽遁', [4, 1, 7]], '谷雨': ['陽遁', [5, 2, 8]], '穀雨': ['陽遁', [5, 2, 8]],
+          '立夏': ['陽遁', [4, 1, 7]], '小满': ['陽遁', [5, 2, 8]], '小滿': ['陽遁', [5, 2, 8]], '芒种': ['陽遁', [6, 3, 9]], '芒種': ['陽遁', [6, 3, 9]],
+          '夏至': ['陰遁', [9, 3, 6]], '小暑': ['陰遁', [8, 2, 5]], '大暑': ['陰遁', [7, 1, 4]],
+          '立秋': ['陰遁', [2, 5, 8]], '处暑': ['陰遁', [1, 4, 7]], '處暑': ['陰遁', [1, 4, 7]], '白露': ['陰遁', [9, 3, 6]],
+          '秋分': ['陰遁', [7, 1, 4]], '寒露': ['陰遁', [6, 9, 3]], '霜降': ['陰遁', [5, 8, 2]],
+          '立冬': ['陰遁', [6, 9, 3]], '小雪': ['陰遁', [5, 8, 2]], '大雪': ['陰遁', [4, 7, 1]]
+        };
+
+        const jiaZi = [
+          '甲子','乙丑','丙寅','丁卯','戊辰','己巳','庚午','辛未','壬申','癸酉',
+          '甲戌','乙亥','丙子','丁丑','戊寅','己卯','庚辰','辛巳','壬午','癸未',
+          '甲申','乙酉','丙戌','丁亥','戊子','己丑','庚寅','辛卯','壬辰','癸巳',
+          '甲午','乙未','丙申','丁酉','戊戌','己亥','庚子','辛丑','壬寅','癸卯',
+          '甲辰','乙巳','丙午','丁未','戊申','己酉','庚戌','辛亥','壬子','癸丑',
+          '甲寅','乙卯','丙辰','丁巳','戊午','己未','庚申','辛酉','壬戌','癸亥'
+        ];
+
+        const dayIdx = jiaZi.indexOf(dayGZ);
+        const yuanIdx = Math.floor((dayIdx % 15) / 5);
+        const yuanNames = ['上元', '中元', '下元'];
+        const [dunType, juArr] = jieQiMap[prevJieQi] || ['陽遁', [1, 7, 4]];
+        const juNum = juArr[yuanIdx];
+        const isYang = dunType === '陽遁';
+
+        // 1. 佈地盤三奇六儀
+        const qiYi = ['戊', '己', '庚', '辛', '壬', '癸', '丁', '丙', '乙'];
+        const earthPlate = {};
+        let curP = juNum;
+        for (let i = 0; i < 9; i++) {
+          earthPlate[curP] = qiYi[i];
+          curP = isYang ? (curP === 9 ? 1 : curP + 1) : (curP === 1 ? 9 : curP - 1);
+        }
+
+        // 2. 找時干支旬首、值符星、值使門
+        const timeIdx = jiaZi.indexOf(timeGZ);
+        const xunIdx = Math.floor(timeIdx / 10);
+        const xunHeads = ['甲子戊', '甲戌己', '甲申庚', '甲午辛', '甲辰壬', '甲寅癸'];
+        const xunStem = qiYi[xunIdx];
+        const offset = timeIdx % 10;
+
+        let xunPalace = Number(Object.keys(earthPlate).find(p => earthPlate[p] === xunStem));
+        const effectiveXunPalace = xunPalace === 5 ? 2 : xunPalace;
+
+        const baseStars = { 1:'天蓬', 2:'天芮', 3:'天沖', 4:'天輔', 5:'天禽', 6:'天心', 7:'天柱', 8:'天任', 9:'天英' };
+        const baseDoors = { 1:'休門', 2:'死門', 3:'傷門', 4:'杜門', 5:'死門', 6:'開門', 7:'驚門', 8:'生門', 9:'景門' };
+        const zhiFuStar = xunPalace === 5 ? '天禽(寄芮)' : baseStars[xunPalace];
+        const zhiShiDoor = baseDoors[effectiveXunPalace];
+
+        // 3. 轉天盤九星與天盤奇儀
+        const ring = [4, 9, 2, 7, 6, 1, 8, 3];
+        const starRing = ['天輔', '天英', '天芮', '天柱', '天心', '天蓬', '天任', '天沖'];
+        const timeStem = timeGZ[0] === '甲' ? xunStem : timeGZ[0];
+        let targetStarPalace = Number(Object.keys(earthPlate).find(p => earthPlate[p] === timeStem));
+        if (targetStarPalace === 5) targetStarPalace = 2;
+
+        const startRingIdx = ring.indexOf(effectiveXunPalace);
+        const targetStarRingIdx = ring.indexOf(targetStarPalace);
+        const heavenStar = {};
+        const heavenStem = {};
+
+        for (let i = 0; i < 8; i++) {
+          const srcP = ring[(startRingIdx + i) % 8];
+          const dstP = ring[(targetStarRingIdx + i) % 8];
+          const sName = starRing[(startRingIdx + i) % 8];
+          heavenStar[dstP] = sName === '天芮' ? '天芮/禽' : sName;
+          heavenStem[dstP] = earthPlate[srcP];
+        }
+
+        // 4. 轉八門
+        const doorRing = ['杜門', '景門', '死門', '驚門', '開門', '休門', '生門', '傷門'];
+        let zhiShiPalace = xunPalace;
+        for (let step = 0; step < offset; step++) {
+          zhiShiPalace = isYang ? (zhiShiPalace === 9 ? 1 : zhiShiPalace + 1) : (zhiShiPalace === 1 ? 9 : zhiShiPalace - 1);
+        }
+        if (zhiShiPalace === 5) zhiShiPalace = 2;
+
+        const startDoorRingIdx = ring.indexOf(effectiveXunPalace);
+        const targetDoorRingIdx = ring.indexOf(zhiShiPalace);
+        const doors = {};
+        for (let i = 0; i < 8; i++) {
+          const dstP = ring[(targetDoorRingIdx + i) % 8];
+          doors[dstP] = doorRing[(startDoorRingIdx + i) % 8];
+        }
+
+        // 5. 排八神
+        const godsOrder = ['值符', '騰蛇', '太陰', '六合', '白虎', '玄武', '九地', '九天'];
+        const gods = {};
+        for (let i = 0; i < 8; i++) {
+          const dstP = isYang
+            ? ring[(targetStarRingIdx + i) % 8]
+            : ring[(targetStarRingIdx - i + 8) % 8];
+          gods[dstP] = godsOrder[i];
+        }
+
+        const palaceNames = { 1:'坎一宮(北)', 2:'坤二宮(西南)', 3:'震三宮(東)', 4:'巽四宮(東南)', 5:'中五宮', 6:'乾六宮(西北)', 7:'兌七宮(西)', 8:'艮八宮(東北)', 9:'離九宮(南)' };
+        const palacesData = [4, 9, 2, 3, 5, 7, 8, 1, 6].map(p => ({
+          palaceId: p,
+          palaceName: palaceNames[p],
+          god: p === 5 ? '-' : gods[p],
+          star: p === 5 ? '-' : heavenStar[p],
+          door: p === 5 ? '-' : doors[p],
+          heavenStem: p === 5 ? '-' : heavenStem[p],
+          earthStem: earthPlate[p]
+        }));
+
+        const structured = {
+          system: 'qimen-dunjia',
+          methodology: { school, solarTerm: prevJieQi, yuan: yuanNames[yuanIdx], dun: `${dunType}${juNum}局` },
+          pillars: { year: yearGZ, month: monthGZ, day: dayGZ, time: timeGZ },
+          keyIndicators: { xunHead: xunHeads[xunIdx], zhiFuStar, zhiShiDoor, timeXunKong: bazi.getTimeXunKong() },
+          palaces: palacesData
+        };
+
+        latestPayload = { type: 'qimen', data: structured, question };
+        document.getElementById('json-output').textContent = JSON.stringify(structured, null, 2);
+
+        let html = `
+          <div class="qm-summary-bar">
+            <span>四柱：${yearGZ}年 ${monthGZ}月 ${dayGZ}日 ${timeGZ}時</span>
+            <span>節氣：${prevJieQi}${yuanNames[yuanIdx]}・<strong>${dunType}${juNum}局</strong></span>
+            <span>值符：${zhiFuStar}・值使：${zhiShiDoor}</span>
+          </div>
+          <div class="qm-grid">`;
+
+        palacesData.forEach(cell => {
+          if (cell.palaceId === 5) {
+            html += `<div class="qm-cell" style="background:#131c31; align-items:center; justify-content:center;">
+              <div style="color:var(--muted);">中五宮（寄坤二）</div>
+              <div style="font-size:1.1rem; font-weight:700; color:var(--gold);">地盤：${cell.earthStem}</div>
+            </div>`;
+          } else {
+            html += `<div class="qm-cell">
+              <div class="qm-top"><span class="qm-god">${cell.god}</span><span>${cell.palaceName}</span></div>
+              <div class="qm-mid"><span>${cell.star}</span><span style="color:var(--danger);">天盤 ${cell.heavenStem}</span></div>
+              <div class="qm-bot"><span>${cell.door}</span><span>地盤 ${cell.earthStem}</span></div>
+            </div>`;
+          }
+        });
+        html += `</div>`;
+        document.getElementById('visual-board').innerHTML = html;
+      } catch (err) {
+        showToast(`奇門排盤發生錯誤：${err.message}`, 'error');
+      }
+    }
+
+    // ==========================================
+    // 模組 3：四柱八字確定性排盤 (補齊 bazi 模組計算)
+    // ==========================================
+    function runBazi() {
+      const dtVal = document.getElementById('bz-datetime').value;
+      const genderNum = parseInt(document.getElementById('bz-gender').value, 10);
+      const sect = parseInt(document.getElementById('bz-sect').value, 10);
+      const question = document.getElementById('bz-question').value.trim() || '請分析日主強弱、月令格局、十神配置與大運流年走勢。';
+
+      if (!dtVal) {
+        showToast('請選擇陽曆出生時間', 'error');
+        return;
+      }
+
+      try {
+        const [dPart, tPart] = dtVal.split('T');
+        const [Y, M, D] = dPart.split('-').map(Number);
+        const [h, m] = tPart.split(':').map(Number);
+
+        const solar = Solar.fromYmdHms(Y, M, D, h, m, 0);
+        const lunar = solar.getLunar();
+        const bazi = lunar.getEightChar();
+        bazi.setSect(sect);
+
+        const yun = bazi.getYun(genderNum);
+        const daYunList = yun.getDaYun().slice(1, 9).map(dy => ({
+          startYear: dy.getStartYear(),
+          ageRange: `${dy.getStartAge()}-${dy.getEndAge()}歲`,
+          ganZhi: dy.getGanZhi()
+        }));
+
+        const structured = {
+          system: 'bazi',
+          methodology: {
+            solarTermMonth: '嚴格依節氣交接定月柱',
+            lateZiRule: sect === 1 ? '23:00 換日柱（算隔日）' : '00:00 換日柱（晚子時算當日）',
+            gender: genderNum === 1 ? '乾造（男）' : '坤造（女）'
+          },
+          dayMaster: bazi.getDayGan(),
+          pillars: {
+            year: { ganZhi: bazi.getYear(), tenGodStem: bazi.getYearShiShenGan(), hideGan: bazi.getYearHideGan(), tenGodBranch: bazi.getYearShiShenZhi(), naYin: bazi.getYearNaYin() },
+            month: { ganZhi: bazi.getMonth(), tenGodStem: bazi.getMonthShiShenGan(), hideGan: bazi.getMonthHideGan(), tenGodBranch: bazi.getMonthShiShenZhi(), naYin: bazi.getMonthNaYin() },
+            day: { ganZhi: bazi.getDay(), tenGodStem: '日主', hideGan: bazi.getDayHideGan(), tenGodBranch: bazi.getDayShiShenZhi(), naYin: bazi.getDayNaYin(), xunKong: bazi.getDayXunKong() },
+            time: { ganZhi: bazi.getTime(), tenGodStem: bazi.getTimeShiShenGan(), hideGan: bazi.getTimeHideGan(), tenGodBranch: bazi.getTimeShiShenZhi(), naYin: bazi.getTimeNaYin() }
+          },
+          daYun: daYunList
+        };
+
+        latestPayload = { type: 'bazi', data: structured, question };
+        document.getElementById('json-output').textContent = JSON.stringify(structured, null, 2);
+
+        const p = structured.pillars;
+        let html = `
+          <table class="bz-table">
+            <thead>
+              <tr><th>項目</th><th>年柱</th><th>月柱</th><th>日柱（日主）</th><th>時柱</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>十神</td><td>${p.year.tenGodStem}</td><td>${p.month.tenGodStem}</td><td style="color:var(--gold); font-weight:700;">日主 (${structured.dayMaster})</td><td>${p.time.tenGodStem}</td></tr>
+              <tr><td>干支</td><td class="pillar-char">${p.year.ganZhi}</td><td class="pillar-char">${p.month.ganZhi}</td><td class="pillar-char">${p.day.ganZhi}</td><td class="pillar-char">${p.time.ganZhi}</td></tr>
+              <tr><td>藏干</td><td>${p.year.hideGan.join(' ')}</td><td>${p.month.hideGan.join(' ')}</td><td>${p.day.hideGan.join(' ')}</td><td>${p.time.hideGan.join(' ')}</td></tr>
+              <tr><td>藏干十神</td><td>${p.year.tenGodBranch.join(' ')}</td><td>${p.month.tenGodBranch.join(' ')}</td><td>${p.day.tenGodBranch.join(' ')}</td><td>${p.time.tenGodBranch.join(' ')}</td></tr>
+              <tr><td>納音</td><td>${p.year.naYin}</td><td>${p.month.naYin}</td><td>${p.day.naYin}</td><td>${p.time.naYin}</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:0.85rem; font-size:0.85rem;">
+            <strong style="color:var(--gold);">大運序列（日空亡：${p.day.xunKong}）：</strong><br/>
+            ${daYunList.map(d => `<span class="dayun-pill">${d.startYear} (${d.ageRange}) <strong>${d.ganZhi}</strong></span>`).join('')}
+          </div>`;
+        document.getElementById('visual-board').innerHTML = html;
+      } catch (err) {
+        showToast(`八字排盤發生錯誤：${err.message}`, 'error');
+      }
+    }
+
+    // ==========================================
+    // 模組 4：SKILL.md 規則約束與 Gemini API 串接
+    // ==========================================
+    function buildSkillPrompt() {
+      if (!latestPayload) return null;
+
+      const skillConstraints = {
+        ziwei: `你現在是嚴格遵循《Numerologist Skills - 紫微斗數工程規範》的命理分析師。
+【核心約束】
+1. 嚴禁自行重新排盤或篡改輸入 JSON 中的宮位、主星、四化與大限數據。
+2. 先聲明口徑（三合紫微、閏月與子時設定），再依序分析：① 命身宮與三方四正（命、財、官、遷）結構 ② 核心星曜組合與四化引動 ③ 針對提問或大限流年的具體象義。
+3. 保持客觀結構化，避免宿命論恐嚇，健康/法律/投資需附帶現實風險提示。`,
+
+        qimen: `你現在是嚴格遵循《Numerologist Skills - 奇門遁甲工程規範》的術數分析師。
+【核心約束】
+1. 嚴禁自行重新起局或修改輸入 JSON 中的九宮、八神、九星、八門與天地盤奇儀。
+2. 先聲明口徑（時家轉盤奇門・拆補法），再依序拆解：① 局象總綱（陰陽遁、值符值使落宮、空亡） ② 用神選取（日干為求測人、時干為事體，並結合所問事項取用神宮位） ③ 宮內星門神儀生剋與吉凶趨勢 ④ 行動與方位/時間建議。`,
+
+        bazi: `你現在是嚴格遵循《Numerologist Skills - 四柱八字工程規範》的命理分析師。
+【核心約束】
+1. 嚴禁自行推算干支或更改輸入 JSON 中的四柱、十神、藏干與大運數據。
+2. 先聲明口徑（節氣定月、晚子時規則），再依序分析：① 日主屬性與月令得令/失令狀態 ② 四柱五行生剋與十神結構（格局取向） ③ 喜用神與忌神推演 ④ 結合大運序列回應使用者的核心問題。`
+      };
+
+      const sys = skillConstraints[latestPayload.type];
+      const userContent = `【確定性排盤引擎輸出 JSON】\n${JSON.stringify(latestPayload.data, null, 2)}\n\n【使用者提問】\n${latestPayload.question}`;
+      return { sys, userContent };
+    }
+
+    function copyFullPrompt() {
+      const promptObj = buildSkillPrompt();
+      if (!promptObj) {
+        showToast('請先執行排盤！', 'error');
+        return;
+      }
+      const combined = `${promptObj.sys}\n\n---\n\n${promptObj.userContent}`;
+      const ok = copyTextSafe(combined);
+      if (ok) {
+        document.getElementById('copy-status').textContent = '已複製完整受約束 Prompt 與盤面 JSON！可直接貼到網頁版 Gemini / ChatGPT / DeepSeek 對話框。';
+        showToast('已複製完整 SKILL 約束提示詞！', 'success');
+      } else {
+        showToast('自動複製受限，請手動選取 JSON 區域複製', 'error');
+      }
+    }
+
+    async function callLLM() {
+      const promptObj = buildSkillPrompt();
+      if (!promptObj) {
+        showToast('請先執行排盤！', 'error');
+        return;
+      }
+
+      const apiKey = document.getElementById('api-key').value.trim();
+      const model = document.getElementById('api-model').value;
+      const outEl = document.getElementById('ai-output');
+
+      if (!apiKey) {
+        outEl.textContent = '未偵測到 Gemini API Key（AIzaSy...）。若無 API Key，請點擊上方「一鍵複製」按鈕，直接貼到網頁版 Gemini / ChatGPT / DeepSeek 即可使用。';
+        showToast('未填寫 Gemini API Key，建議使用「一鍵複製」功能', 'info');
+        return;
+      }
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      outEl.textContent = `正在呼叫 ${model} 並依照 SKILL.md 規範進行結構化推演中，請稍候...`;
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: promptObj.sys }]
+            },
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: promptObj.userContent }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.3
+            }
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          let detailMsg = errText;
+          try {
+            const errJson = JSON.parse(errText);
+            if (errJson?.error?.message) {
+              detailMsg = errJson.error.message;
+            }
+          } catch (_) {}
+
+          if (res.status === 429) {
+            throw new Error(`HTTP 429（Gemini Free Tier 免費額度速率限制已達上限）：${detailMsg}\n建議操作：請稍候 30～60 秒後再試，或從左側下拉選單切換至較低階的 Flash-Lite 模型（如 gemini-3.1-flash-lite 或 gemini-3.5-flash-lite）。`);
+          }
+          throw new Error(`HTTP ${res.status}：${detailMsg}`);
+        }
+
+        const data = await res.json();
+        const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!replyText) {
+          const finishReason = data?.candidates?.[0]?.finishReason || 'UNKNOWN';
+          throw new Error(`未收到有效文字回覆（finishReason: ${finishReason}）。`);
+        }
+
+        outEl.textContent = replyText;
+        showToast(`已透過 ${model} 完成受約束解盤！`, 'success');
+      } catch (err) {
+        outEl.textContent = `Gemini API 呼叫失敗：\n${err.message}\n\n（備用方案：您隨時可點擊上方「一鍵複製」按鈕，將完整的 SKILL.md 約束提示詞與盤面 JSON 貼至網頁版 Gemini 進行解盤。）`;
+        showToast('Gemini API 請求異常，請檢視提示訊息', 'error');
+      }
+    }
+  </script>
+</body>
+</html>
